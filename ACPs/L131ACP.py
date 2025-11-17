@@ -1,138 +1,194 @@
-import  pygame
-import random 
+import math
+import random
+import pygame 
+
+# constants 
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 500
+PLAYER_START_X = 370
+PLAYER_START_Y = 380
+ENEMY_START_Y_MIN = 50
+ENEMY_START_Y_MAX = 150
+ENEMY_SPEED_X = 4
+ENEMY_SPEED_Y = 40 
+BULLET_SPEED_Y = 10
+
+# Resize-related constants
+PLAYER_WIDTH = 80
+PLAYER_HEIGHT = 80
+ENEMY_WIDTH = 98
+ENEMY_HEIGHT = 98
+COLLISION_DISTANCE = 25
 
 # initialize pygame
 pygame.init()
 
-# custom event IDs for color change events
-SPRITE_COLOR_CHANGE_EVENT = pygame.USEREVENT + 1
-BACKGROUND_COLOR_CHANGE_EVENT = pygame.USEREVENT + 2
+# create the screen 
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-# define basic colors using pygame.Color
-# background colors
-BLUE = pygame.Color("blue")
-LIGHT_BLUE = pygame.Color("lightblue")
-DARKBLUE = pygame.Color("darkblue")
+# caption and icon
+pygame.display.set_caption("Space Invader - 7 Enemies")
+icon = pygame.image.load("ufo-clean.png")
+pygame.display.set_icon(icon)
 
-# sprite colors
-YELLOW = pygame.Color("yellow")
-MAGENTA  = pygame.Color("magenta")
-ORANGE = pygame.Color("orange")
-WHITE = pygame.Color("white")
-CYAN = pygame.Color("cyan")
-
-# sprite class representing the moving object 
-class Sprite(pygame.sprite.Sprite):
-
-    # constructor method
-    def __init__(self, color, height, width):
-
-        # call to the parent class (sprite) constructor
-        super().__init__()
-
-        # create the sprite surface with dimensions and color
-        self.image = pygame.Surface([width, height])
-        self.image.fill(color)
-
-        # get the sprite's rect defining its position and size
-        self.rect = self.image.get_rect()
-
-        # set initial velocity with random direction
-        self.velocity = [random.choice([-1, 1]), random.choice([-1, 1])]
-
-    # method to update the sprite's position
-    def update(self):
-        # move the sprite by its velocity 
-        self.rect.move_ip(self.velocity)
-
-        # flag to track if the sprite hits a boundary 
-        boundary_hit = False
-
-        # check for collision with left or right boundaries and reverse direction
-        if self.rect.left <= 0 or self.rect.right >=500:
-            self.velocity[0] = -self.velocity[0]
-            boundary_hit = True
-
-        # check for collision with top or bottom boundaries and reverse direction
-        if self.rect.top <= 0 or self.rect.bottom >=400:
-            self.velocity[1] = -self.velocity[1]
-            boundary_hit = True
-
-        # if a boundary was hit, post events to change colors
-        if boundary_hit:
-            pygame.event.post(pygame.event.Event(SPRITE_COLOR_CHANGE_EVENT))
-
-            pygame.event.post(pygame.event.Event(BACKGROUND_COLOR_CHANGE_EVENT))
-
-    # method to change the sprite's color
-    def change_color(self):
-        self.image.fill(random.choice([YELLOW, MAGENTA, ORANGE, WHITE, CYAN]))
-
-    # function to change the background color
-    @staticmethod
-    def change_background_color():
-        global bg_color
-        bg_color = random.choice([BLUE, LIGHT_BLUE, DARKBLUE])
-
-# create a group to hold the sprite
-all_sprites_list = pygame.sprite.Group()
-    
-# instantiate the sprite
-sp1 = Sprite(WHITE, 20, 30)
-
-# randomly position the sprite
-sp1.rect.x = random.randint(0, 480)
-sp1.rect.y = random.randint(0, 370)
-
-# add the sprite to the group
-all_sprites_list.add(sp1)   
-
-# create the game window
-screen = pygame.display.set_mode((500, 400))
-
-# set the window title
-pygame.display.set_caption("Colorful Bounce")
-
-# set the initial background color
-bg_color = BLUE
-screen.fill(bg_color)
-# game loop control flag
-running = False
-exit = False
-
-# create a clock object to control the frame rate
+# Add clock for frame rate control
 clock = pygame.time.Clock()
-# main game loop
-while not running:
-    # event handling loop
+
+# background image
+background = pygame.image.load("test-space-new3.jpg")
+
+# player
+playerImg = pygame.image.load("test-player-new1-clean.png")
+# scale player down so it appears smaller
+playerImg = pygame.transform.scale(playerImg, (PLAYER_WIDTH, PLAYER_HEIGHT))
+playerX = PLAYER_START_X
+playerY = PLAYER_START_Y
+playerX_change = 0
+
+# enemy and bullet setup 
+enemyImg = []
+enemyX = []
+enemyY = []
+enemyX_change = []
+enemyY_change = []
+num_of_enemies = 7  # Changed to 7 enemies as requested
+
+# creating 7 enemies
+for i in range(num_of_enemies):
+    img = pygame.image.load("new-thanos-clean.png")
+    img = pygame.transform.scale(img, (ENEMY_WIDTH, ENEMY_HEIGHT))
+    enemyImg.append(img)
+    enemyX.append(random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH))
+    enemyY.append(random.randint(ENEMY_START_Y_MIN, ENEMY_START_Y_MAX))
+    enemyX_change.append(ENEMY_SPEED_X)
+    enemyY_change.append(ENEMY_SPEED_Y)
+
+# bullet variables
+bulletImg = pygame.image.load("bullet-clean.png")
+bulletImg = pygame.transform.scale(bulletImg, (12, 24))
+
+bulletX = 0
+bulletY = PLAYER_START_Y
+bulletX_change = 0
+bulletY_change = BULLET_SPEED_Y
+bullet_state = "ready"
+
+# score and rendering
+score_value = 0
+font = pygame.font.Font('freesansbold.ttf', 32)
+textX  = 10
+textY = 10 
+
+# game over text
+over_font = pygame.font.Font('freesansbold.ttf', 64)
+
+# function to show score
+def show_score(x, y):
+    score = font.render("Score : " + str(score_value), True, (255, 255, 255))
+    screen.blit(score, (x, y))
+
+# function to display game over text 
+def game_over_text():
+    over_text = over_font.render("GAME OVER", True, (255, 255, 255))
+    screen.blit(over_text, (200, 250))
+
+# function to draw the player
+def player(x, y):
+    screen.blit(playerImg, (x, y))
+
+# function to draw the enemy 
+def enemy(x, y, i):
+    screen.blit(enemyImg[i], (x, y))
+
+# function to fire a bullet
+def fire_bullet(x, y):
+    global bullet_state 
+    bullet_state = "fire"
+    screen.blit(bulletImg, (x + 16, y + 10))
+
+# function to check for collision between enemy and bullet
+def isCollision(enemyX, enemyY, bulletX, bulletY):
+    distance = math.sqrt((enemyX - bulletX) ** 2 + (enemyY - bulletY) ** 2)
+    return distance < COLLISION_DISTANCE
+
+# function to check for collision between player and enemy
+def isPlayerCollision(playerX, playerY, enemyX, enemyY):
+    distance = math.sqrt((playerX - enemyX) ** 2 + (playerY - enemyY) ** 2)
+    return distance < COLLISION_DISTANCE
+
+# game loop 
+running = True
+while running:
+    screen.fill((0, 0, 0))
+    screen.blit(background, (0,0))
+
     for event in pygame.event.get():
-        # if the window's close button is clicked, exit the game
         if event.type == pygame.QUIT:
-            running = True
-            exit = True
+            running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                playerX_change = -5
+            if event.key == pygame.K_RIGHT:
+                playerX_change = 5
+            if event.key == pygame.K_SPACE and bullet_state == "ready":
+                bulletX = playerX
+                bulletY = PLAYER_START_Y
+                fire_bullet(bulletX, bulletY)
 
-        # if the sprite color change event is triggered, change the background color
-        elif event.type == SPRITE_COLOR_CHANGE_EVENT:
-            sp1.change_color()
+        if event.type == pygame.KEYUP and event.key in [pygame.K_LEFT, pygame.K_RIGHT]:
+            playerX_change = 0
 
-        # if the background color change event is triggered, change the background color
-        elif event.type == BACKGROUND_COLOR_CHANGE_EVENT:
-            Sprite.change_background_color()
+    # player movement 
+    playerX += playerX_change
+    playerX = max(0, min(playerX, SCREEN_WIDTH - PLAYER_WIDTH))
 
-    # update all sprites in the group
-    all_sprites_list.update()
+    # enemy movement
+    for i in range(num_of_enemies):
+        # Game over condition - if enemy reaches bottom
+        if enemyY[i] > 340:
+            for j in range(num_of_enemies):
+                enemyY[j] = 2000
+            game_over_text()
+            break
 
-    # fill the screen with the current background color
-    screen.fill(bg_color)
+        enemyX[i] += enemyX_change[i]
+        if enemyX[i] <= 0 or enemyX[i] >= SCREEN_WIDTH - ENEMY_WIDTH:
+            enemyX_change[i] *= -1
+            enemyY[i] += enemyY_change[i]
 
-    # draw all sprites onto the screen
-    all_sprites_list.draw(screen)
+        # Collision detection between bullet and enemy
+        if isCollision(enemyX[i], enemyY[i], bulletX, bulletY):
+            score_value += 1  # Increase score by 1 when collision occurs
+            bulletY = PLAYER_START_Y
+            bullet_state = "ready"
+            # Respawn enemy at random position
+            enemyX[i] = random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH)
+            enemyY[i] = random.randint(ENEMY_START_Y_MIN, ENEMY_START_Y_MAX)
 
-    # refresh the display
-    pygame.display.flip()
-    # limit the frame rate to 60 frames per second
+        # Collision detection between player and enemy
+        if isPlayerCollision(playerX, playerY, enemyX[i], enemyY[i]):
+            score_value += 1  # Increase score by 1 when player collides with enemy
+            # Respawn enemy at random position
+            enemyX[i] = random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH)
+            enemyY[i] = random.randint(ENEMY_START_Y_MIN, ENEMY_START_Y_MAX)
+            # Optional: Add player penalty or effect here
+
+        enemy(enemyX[i], enemyY[i], i)
+
+    # bullet movement
+    if bulletY <= 0:
+        bulletY = PLAYER_START_Y
+        bullet_state = "ready"
+    elif bullet_state == "fire":
+        fire_bullet(bulletX, bulletY)
+        bulletY -= bulletY_change
+
+    player(playerX, playerY)
+    show_score(textX, textY)
+
+    pygame.display.update()
+
+    # control the frame rate
     clock.tick(60)
-    clock.tick(240)
-# quit pygame
-pygame.quit()
 
+pygame.quit()

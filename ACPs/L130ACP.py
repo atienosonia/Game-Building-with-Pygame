@@ -1,188 +1,180 @@
-import math
-import random
-import pygame # pygame is a library for creating video games
-
-# constants 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 500
-PLAYER_START_X = 370
-PLAYER_START_Y = 380
-ENEMY_START_Y_MIN = 50
-ENEMY_START_Y_MAX = 150
-ENEMY_SPEED_X = 4
-ENEMY_SPEED_Y = 40 
-BULLET_SPEED_Y = 10
-
-# Resize-related constants (reduced sizes)
-PLAYER_WIDTH = 48
-PLAYER_HEIGHT = 48
-ENEMY_WIDTH = 48
-ENEMY_HEIGHT = 48
-COLLISION_DISTANCE = 25
+import pygame
+import random 
 
 # initialize pygame
 pygame.init()
 
-# create the screen 
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+# custom event IDs for color change events
+SPRITE1_COLOR_CHANGE_EVENT = pygame.USEREVENT + 1
+SPRITE2_COLOR_CHANGE_EVENT = pygame.USEREVENT + 2
+BACKGROUND_COLOR_CHANGE_EVENT = pygame.USEREVENT + 3
+BOTH_SPRITES_COLOR_CHANGE_EVENT = pygame.USEREVENT + 4
 
-# caption and icon
-pygame.display.set_caption("Space Invader")
-icon = pygame.image.load("ufo-clean.png")
-pygame.display.set_icon(icon)
+# define basic colors using pygame.Color
+# background colors
+BLUE = pygame.Color("blue")
+LIGHT_BLUE = pygame.Color("lightblue")
+DARKBLUE = pygame.Color("darkblue")
+GREEN = pygame.Color("green")
+PURPLE = pygame.Color("purple")
+GRAY = pygame.Color("gray")
 
-# Add clock for frame rate control
+# sprite colors
+YELLOW = pygame.Color("yellow")
+MAGENTA  = pygame.Color("magenta")
+ORANGE = pygame.Color("orange")
+WHITE = pygame.Color("white")
+CYAN = pygame.Color("cyan")
+RED = pygame.Color("red")
+LIME = pygame.Color("lime")
+PINK = pygame.Color("pink")
+
+# sprite class representing the moving object 
+class Sprite(pygame.sprite.Sprite):
+
+    # constructor method
+    def __init__(self, color, height, width, sprite_id):
+        # call to the parent class (sprite) constructor
+        super().__init__()
+
+        # create the sprite surface with dimensions and color
+        self.image = pygame.Surface([width, height])
+        self.image.fill(color)
+
+        # get the sprite's rect defining its position and size
+        self.rect = self.image.get_rect()
+
+        # set initial velocity with random direction
+        self.velocity = [random.choice([-2, -1, 1, 2]), random.choice([-2, -1, 1, 2])]
+        
+        # store sprite ID to identify which sprite this is
+        self.sprite_id = sprite_id
+
+    # method to update the sprite's position
+    def update(self):
+        # move the sprite by its velocity 
+        self.rect.move_ip(self.velocity)
+
+        # flag to track if the sprite hits a boundary 
+        boundary_hit = False
+
+        # check for collision with left or right boundaries and reverse direction
+        if self.rect.left <= 0 or self.rect.right >= 500:
+            self.velocity[0] = -self.velocity[0]
+            boundary_hit = True
+
+        # check for collision with top or bottom boundaries and reverse direction
+        if self.rect.top <= 0 or self.rect.bottom >= 400:
+            self.velocity[1] = -self.velocity[1]
+            boundary_hit = True
+
+        # if a boundary was hit, post events to change colors
+        if boundary_hit:
+            # Post individual sprite color change event based on sprite ID
+            if self.sprite_id == 1:
+                pygame.event.post(pygame.event.Event(SPRITE1_COLOR_CHANGE_EVENT))
+            elif self.sprite_id == 2:
+                pygame.event.post(pygame.event.Event(SPRITE2_COLOR_CHANGE_EVENT))
+            
+            # Also post background color change event
+            pygame.event.post(pygame.event.Event(BACKGROUND_COLOR_CHANGE_EVENT))
+            
+            # Occasionally post event to change both sprites
+            if random.random() < 0.3:  # 30% chance
+                pygame.event.post(pygame.event.Event(BOTH_SPRITES_COLOR_CHANGE_EVENT))
+
+    # method to change the sprite's color
+    def change_color(self):
+        if self.sprite_id == 1:
+            # Color palette for sprite 1
+            self.image.fill(random.choice([YELLOW, MAGENTA, ORANGE, WHITE, CYAN]))
+        else:
+            # Color palette for sprite 2
+            self.image.fill(random.choice([RED, LIME, PINK, CYAN, ORANGE]))
+
+# function to change the background color
+def change_background_color():
+    global bg_color
+    bg_color = random.choice([BLUE, LIGHT_BLUE, DARKBLUE, GREEN, PURPLE, GRAY])
+
+# create a group to hold the sprites
+all_sprites_list = pygame.sprite.Group()
+    
+# instantiate the first sprite
+sp1 = Sprite(WHITE, 20, 30, 1)
+# randomly position the sprite
+sp1.rect.x = random.randint(50, 200)
+sp1.rect.y = random.randint(50, 200)
+
+# instantiate the second sprite  
+sp2 = Sprite(RED, 25, 25, 2)
+# randomly position the second sprite
+sp2.rect.x = random.randint(250, 400)
+sp2.rect.y = random.randint(150, 300)
+
+# add the sprites to the group
+all_sprites_list.add(sp1)   
+all_sprites_list.add(sp2)
+
+# create the game window
+screen = pygame.display.set_mode((500, 400))
+
+# set the window title
+pygame.display.set_caption("Two Sprites with Custom Color Events")
+
+# set the initial background color
+bg_color = BLUE
+screen.fill(bg_color)
+
+# game loop control flag
+exit_game = False
+
+# create a clock object to control the frame rate
 clock = pygame.time.Clock()
 
-# background image
-background = pygame.image.load("space.jpg")
-
-# player
-playerImg = pygame.image.load("player-clean.png")
-# scale player down so it appears smaller
-playerImg = pygame.transform.scale(playerImg, (PLAYER_WIDTH, PLAYER_HEIGHT))
-playerX = PLAYER_START_X
-playerY = PLAYER_START_Y
-playerX_change = 0
-
-# enemy and bullet setup 
-enemyImg = []
-enemyX = []
-enemyY = []
-enemyX_change = []
-enemyY_change = []
-num_of_enemies = 6
-
-# creating enemies
-for i in range(num_of_enemies):
-    img = pygame.image.load("enemy-clean.png")
-    img = pygame.transform.scale(img, (ENEMY_WIDTH, ENEMY_HEIGHT))  # scale enemy down
-    enemyImg.append(img)
-    enemyX.append(random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH))
-    enemyY.append(random.randint(ENEMY_START_Y_MIN, ENEMY_START_Y_MAX))
-    enemyX_change.append(ENEMY_SPEED_X)
-    enemyY_change.append(ENEMY_SPEED_Y)
-
-# initializing bulltet variables
-# bullet
-
-bulletImg = pygame.image.load("bullet-clean.png")
-# optional: scale bullet so it matches new sizes (uncomment / adjust if desired)
-bulletImg = pygame.transform.scale(bulletImg, (12, 24))
-
-bulletX = 0
-bulletY = PLAYER_START_Y
-bulletX_change = 0
-bulletY_change = BULLET_SPEED_Y
-bullet_state = "ready"
-
-# score and rendering
-score_value = 0
-font = pygame.font.Font('freesansbold.ttf', 32)
-textX  = 10
-textY = 10 
-
-# game over text
-over_font = pygame.font.Font('freesansbold.ttf', 64)
-
-# function to show score
-def show_score(x, y):
-    # display the current score on the screen
-    score = font.render("Score : " + str(score_value), True, (255, 255, 255))
-    screen.blit(score, (x, y))
-
-# function to display game over text 
-def game_over_text():
-    # display the game over text
-    over_text = over_font.render("GAME OVER", True, (255, 255, 255))
-    screen.blit(over_text, (200, 250))
-
-# function to draw the player
-def player(x, y):
-    # draw the player
-    screen.blit(playerImg, (x, y))
-
-# function to draw the enemy 
-def enemy(x, y, i):
-    screen.blit(enemyImg[i], (x, y))
-
-# function to fire a bullet
-def fire_bullet(x, y):
-    # fire a bullet from the player's position
-    global bullet_state 
-    bullet_state = "fire"
-    screen.blit(bulletImg, (x + 16, y + 10))
-
-# function to check for collision
-def isCollision(enemyX, enemyY, bulletX, bulletY):
-    # check if there is a collision between the enemy and a bullet
-    distance = math.sqrt((enemyX - bulletX) ** 2 + (enemyY - bulletY) ** 2)
-    return distance < COLLISION_DISTANCE
-
-# game loop 
-running = True
-while running:
-    screen.fill((0, 0, 0))
-    screen.blit(background, (0,0))
-
+# main game loop
+while not exit_game:
+    # event handling loop
     for event in pygame.event.get():
+        # if the window's close button is clicked, exit the game
         if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                playerX_change = -5
-            if event.key == pygame.K_RIGHT:
-                playerX_change = 5
-            if event.key == pygame.K_SPACE and bullet_state == "ready":
-                bulletX = playerX
-                bulletY = PLAYER_START_Y
-                fire_bullet(bulletX, bulletY)
+            exit_game = True
 
-        if event.type == pygame.KEYUP and event.key in [pygame.K_LEFT, pygame.K_RIGHT]:
-            playerX_change = 0
+        # Handle sprite 1 color change event
+        elif event.type == SPRITE1_COLOR_CHANGE_EVENT:
+            sp1.change_color()
+            print("Sprite 1 changed color!")
 
-    # player movement 
-    playerX += playerX_change
-    # use PLAYER_WIDTH for boundary clamp instead of hard-coded 64
-    playerX = max(0, min(playerX, SCREEN_WIDTH - PLAYER_WIDTH))
+        # Handle sprite 2 color change event  
+        elif event.type == SPRITE2_COLOR_CHANGE_EVENT:
+            sp2.change_color()
+            print("Sprite 2 changed color!")
 
-    # enemy movement
-    for i in range(num_of_enemies):
-        if enemyY[i] > 340:
-            for j in range(num_of_enemies):
-                enemyY[j] = 2000
-            game_over_text()
-            break
+        # Handle background color change event
+        elif event.type == BACKGROUND_COLOR_CHANGE_EVENT:
+            change_background_color()
+            print("Background changed color!")
 
-        enemyX[i] += enemyX_change[i]
-        # use ENEMY_WIDTH for edge checks
-        if enemyX[i] <= 0 or enemyX[i] >= SCREEN_WIDTH - ENEMY_WIDTH:
-            enemyX_change[i] *= -1
-            enemyY[i] += enemyY_change[i]
+        # Handle both sprites color change event
+        elif event.type == BOTH_SPRITES_COLOR_CHANGE_EVENT:
+            sp1.change_color()
+            sp2.change_color()
+            print("Both sprites changed colors!")
 
-        # collision detection
-        if isCollision(enemyX[i], enemyY[i], bulletX, bulletY):
-            score_value += 1                      # <- increment score
-            bulletY = PLAYER_START_Y
-            bullet_state = "ready"
-            # respawn enemy using ENEMY_WIDTH constant
-            enemyX[i] = random.randint(0, SCREEN_WIDTH - ENEMY_WIDTH)
-            enemyY[i] = random.randint(ENEMY_START_Y_MIN, ENEMY_START_Y_MAX)
+    # update all sprites in the group
+    all_sprites_list.update()
 
-        enemy(enemyX[i], enemyY[i], i)
+    # fill the screen with the current background color
+    screen.fill(bg_color)
 
-    # bullet movement
-    if bulletY <= 0:
-        bulletY = PLAYER_START_Y
-        bullet_state = "ready"
-    elif bullet_state == "fire":
-        fire_bullet(bulletX, bulletY)
-        bulletY -= bulletY_change
+    # draw all sprites onto the screen
+    all_sprites_list.draw(screen)
 
-    player(playerX, playerY)
-    show_score(textX, textY)
-
-    pygame.display.update()
-
-    # control the frame rate
+    # refresh the display
+    pygame.display.flip()
+    
+    # limit the frame rate to 60 frames per second
     clock.tick(60)
+
+# quit pygame
+pygame.quit()
